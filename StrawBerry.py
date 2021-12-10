@@ -1,8 +1,6 @@
-import math
-
 import numpy as np
 import cv2
-import time
+import math
 from math import*
 
 # bc = tan(45/radian)
@@ -16,15 +14,22 @@ cX = 0.0
 cY = 0.0
 X = 0.0
 Y = 0.0
-convertRadianToDegree = 180/math.pi
-print(math.pi)
+
+lengthOfOnePixelX = 10.2/426
+lengthOfOnePixelY = 0.05/240
 frameWidth = 450
 frameHeight = 400
+deepDistence = 0.0
+distenceBetweenTwoCam = 8
 
+convertRadianToDegree = 180/math.pi
 degreesOutput = 0.0
 degreesOutputCam1 = 0.0
 degreesOutputCam2 = 0.0
-deepDistence = 0.0
+anpha1 = 0.0
+anpha2 = 0.0
+beta1 = 0.0
+
 
 set3 = 450
 set4 = 400
@@ -60,32 +65,45 @@ cv2.resizeWindow("frameSecondCamera", frameWidth, frameHeight)
 # cv2.createTrackbar("lowV", "frameSecondCamera", 168, 255, empty)
 # cv2.createTrackbar("highV", "frameSecondCamera", 255, 255, empty)
 
-def calculateDeep(compareCam):
+def calculateXYZ(compareCam):
     global cX
     global cY
     global X
     global Y
     global degreesOutputCam1
     global degreesOutputCam2
+    global anpha1
+    global anpha2
+    global beta1
     global deepDistence
+    global lengthOfOnePixelX
+    global lengthOfOnePixelY
 
     if compareCam == 1:
-        print("cx", cX)
-        print("cy", cY)
         T1D = abs(cameraCenterX - cX)
-        anpha1 = atan(10.2 * T1D / 4451.7) * convertRadianToDegree
+        T2D = abs(cameraCenterY - cY)
+        anpha1 = atan(9.8 * T1D / 4279.8) * convertRadianToDegree
+        anpha2 = atan(5.45 * T2D / 2352) * convertRadianToDegree
         degreesOutputCam1 = 90 - anpha1
-        X = cX - cameraCenterX
-        Y = cameraCenterY - cY
+        # X = (cX - cameraCenterX) * lengthOfOnePixelX
+        # Y = (cameraCenterY - cY) * lengthOfOnePixelY
     else:
         T1D = abs(cameraCenterX - cX)
-        beta1 = atan(10.2 * T1D / 4451.7) * convertRadianToDegree
+        beta1 = atan(9.8 * T1D / 4279.8) * convertRadianToDegree
         degreesOutputCam2 = 90 - beta1
 
-    # print('degree1 =', degreesOutputCam1)
-    # print('degree2 =', degreesOutputCam2)
-    deepDistence = 8 * tan(degreesOutputCam1 / convertRadianToDegree) * tan(degreesOutputCam2 / convertRadianToDegree) / (tan(degreesOutputCam1 / convertRadianToDegree) + tan(degreesOutputCam2 / convertRadianToDegree))
-    # print('distence =', deepDistence)
+    deepDistence = distenceBetweenTwoCam * tan(degreesOutputCam1 / convertRadianToDegree) * tan(degreesOutputCam2 / convertRadianToDegree) / (tan(degreesOutputCam1 / convertRadianToDegree) + tan(degreesOutputCam2 / convertRadianToDegree))
+    if compareCam == 1:
+        if cX > cameraCenterX:
+            X = tan(anpha1/convertRadianToDegree) * deepDistence
+        else:
+            X = -tan(anpha1 / convertRadianToDegree) * deepDistence
+        if cY > cameraCenterY:
+            Y = -tan(anpha2 / convertRadianToDegree) * deepDistence
+        else:
+            Y = tan(anpha2 / convertRadianToDegree) * deepDistence
+        print("anpha1: ", anpha1)
+        print("x: ", X)
 
 def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam, scale=0.75):
     ret0, frameNo = captureFrame.read()
@@ -103,8 +121,8 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
 
     # cv2.putText(frameNo, "c", (216, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     cv2.circle(frameNo, (cameraCenterX, cameraCenterY), 15, (0, 255, 0), 1)
-    cv2.line(frameNo, (0, cameraCenterY), (width, 120), (0, 255, 0), 1)
-    cv2.line(frameNo, (cameraCenterX, 0), (213, height), (0, 255, 0), 1)
+    # cv2.line(frameNo, (0, cameraCenterY), (width, 120), (0, 255, 0), 1)
+    # cv2.line(frameNo, (cameraCenterX, 0), (213, height), (0, 255, 0), 1)
 
     inputImageFilter = cv2.bilateralFilter(frameNo, 8, 8, 20)  # filter
     hsvImage = cv2.cvtColor(inputImageFilter, cv2.COLOR_BGR2HSV)  # convert color space
@@ -134,10 +152,11 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
             cv2.circle(frameNo, (cX, cY), 0, (0, 0, 255), 0)
             cv2.putText(frameNo, "Center" + str(cX) + ", " + str(cY), (cX - 20, cY - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-            calculateDeep(compareCam)
-            cv2.putText(frameNo, "X: " + str(X), (5, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            cv2.putText(frameNo, "Y: " + str(Y), (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            cv2.putText(frameNo, "Z = D: " + str(deepDistence), (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            calculateXYZ(compareCam)
+            if compareCam == 1:
+                cv2.putText(frameNo, "X: " + str(round(X, 2)), (5, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                cv2.putText(frameNo, "Y: " + str(round(Y, 2)), (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                cv2.putText(frameNo, "Z = D: " + str(round(deepDistence, 2)), (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
 
     cv2.imshow(frameShow, frameNo)
     cv2.imshow(redMask, redObject)
@@ -145,7 +164,9 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
 while True:
     processImage("frameFirstCamera", captureFirstCamera, "frameFirstCamera", "frameFirstCamera", "redMaskFirst", 1)
     processImage("frameSecondCamera", captureSecondCamera, "frameSecondCamera", "frameSecondCamera", "redMaskSecond", 2)
-
+    deepDistence = 0
+    X = 0
+    Y = 0
     if cv2.waitKey(300) & 0xFF == ord('q'):
         break
 
