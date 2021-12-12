@@ -14,9 +14,10 @@ cX = 0.0
 cY = 0.0
 X = 0.0
 Y = 0.0
+index = 0
 
-lengthOfOnePixelX = 10.2/426
-lengthOfOnePixelY = 0.05/240
+# lengthOfOnePixelX = 9.8/426
+# lengthOfOnePixelY = 5.45/240
 frameWidth = 450
 frameHeight = 400
 deepDistence = 0.0
@@ -29,7 +30,6 @@ degreesOutputCam2 = 0.0
 anpha1 = 0.0
 anpha2 = 0.0
 beta1 = 0.0
-
 
 set3 = 450
 set4 = 400
@@ -76,8 +76,6 @@ def calculateXYZ(compareCam):
     global anpha2
     global beta1
     global deepDistence
-    global lengthOfOnePixelX
-    global lengthOfOnePixelY
 
     if compareCam == 1:
         T1D = abs(cameraCenterX - cX)
@@ -85,8 +83,6 @@ def calculateXYZ(compareCam):
         anpha1 = atan(9.8 * T1D / 4279.8) * convertRadianToDegree
         anpha2 = atan(5.45 * T2D / 2352) * convertRadianToDegree
         degreesOutputCam1 = 90 - anpha1
-        # X = (cX - cameraCenterX) * lengthOfOnePixelX
-        # Y = (cameraCenterY - cY) * lengthOfOnePixelY
     else:
         T1D = abs(cameraCenterX - cX)
         beta1 = atan(9.8 * T1D / 4279.8) * convertRadianToDegree
@@ -102,8 +98,27 @@ def calculateXYZ(compareCam):
             Y = -tan(anpha2 / convertRadianToDegree) * deepDistence
         else:
             Y = tan(anpha2 / convertRadianToDegree) * deepDistence
-        print("anpha1: ", anpha1)
-        print("x: ", X)
+
+def cropImage(inputImage):
+    global cX
+    global cY
+    global index
+    xLeft = cX - 45
+    xRight = cX + 45
+    yBottom = cY + 40
+    yTop = cY - 40
+    # print("xLeft = ", xLeft)
+    # print("xRight = ", xRight)
+    # print("yTop = ", yTop)
+    # print("yBottom = ", yBottom)
+    # print("-----------------------------------")
+    if xLeft > 0 and xRight > 0 and yBottom > 0 and yTop > 0:
+        # print("++++++++++++++++++++++++++++++++++++")
+        cv2.rectangle(inputImage, (cX - 40, cY + 40), (cX + 40, cY - 40), (0, 255, 0), 3)
+        roi = inputImage[yTop: yBottom, xLeft: xRight] #Y && X
+        index += 1
+        cv2.imwrite('C:\Image\image' + str(index) + '.png', roi)
+        cv2.imshow("roi", roi)
 
 def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam, scale=0.75):
     ret0, frameNo = captureFrame.read()
@@ -112,12 +127,9 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
     global X
     global Y
     global deepDistence
-    # width = int(captureFirstCamera.get(3))
-    # height = int(captureFirstCamera.get(4))
+    global cameraCenterX
     width = int(frameNo.shape[1] * scale)
     height = int(frameNo.shape[0] * scale)
-    # print(height)
-    # print(width)
 
     # cv2.putText(frameNo, "c", (216, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     cv2.circle(frameNo, (cameraCenterX, cameraCenterY), 15, (0, 255, 0), 1)
@@ -149,7 +161,7 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
             M = cv2.moments(contours)
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
-            cv2.circle(frameNo, (cX, cY), 0, (0, 0, 255), 0)
+            cv2.circle(frameNo, (cX, cY), 3, (0, 0, 255), -1)
             cv2.putText(frameNo, "Center" + str(cX) + ", " + str(cY), (cX - 20, cY - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
             calculateXYZ(compareCam)
@@ -157,9 +169,9 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
                 cv2.putText(frameNo, "X: " + str(round(X, 2)), (5, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
                 cv2.putText(frameNo, "Y: " + str(round(Y, 2)), (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
                 cv2.putText(frameNo, "Z = D: " + str(round(deepDistence, 2)), (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-
+                cropImage(frameNo)
     cv2.imshow(frameShow, frameNo)
-    cv2.imshow(redMask, redObject)
+    # cv2.imshow(redMask, redObject)
 
 while True:
     processImage("frameFirstCamera", captureFirstCamera, "frameFirstCamera", "frameFirstCamera", "redMaskFirst", 1)
@@ -167,9 +179,9 @@ while True:
     deepDistence = 0
     X = 0
     Y = 0
-    if cv2.waitKey(300) & 0xFF == ord('q'):
+    if cv2.waitKey(1500) & 0xFF == ord('q'):
         break
 
-captureFirstCamera.realese()
-captureSecondCamera.realese()
-cv2.destroyAllwindows()
+# captureFirstCamera.realese()
+# captureSecondCamera.realese()
+# cv2.destroyAllwindows()
