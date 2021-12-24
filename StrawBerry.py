@@ -1,20 +1,23 @@
-import numpy as np
 import cv2
 import math
 from math import*
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
 
-# bc = tan(45/radian)
-# print(atan(1)*radian)#From value, calculate degree
-objectName = 'STRAWBERRY'
+X = 0.0
+Y = 0.0
+cX = 0.0
+cY = 0.0
+index = 0
 cameraNo1 = 0
 cameraNo2 = 2
 cameraCenterX = 213
 cameraCenterY = 120
-cX = 0.0
-cY = 0.0
-X = 0.0
-Y = 0.0
-index = 0
+
+check1 = 0 # check if the object is in the common area of 2 cams
+check2 = 0 # check if the object is in the common area of 2 cams
+numberObjectInOneShot = 0
 
 # lengthOfOnePixelX = 9.8/426
 # lengthOfOnePixelY = 5.45/240
@@ -23,13 +26,16 @@ frameHeight = 400
 deepDistence = 0.0
 distenceBetweenTwoCam = 8
 
-convertRadianToDegree = 180/math.pi
+beta1 = 0.0
+anpha1 = 0.0
+anpha2 = 0.0
 degreesOutput = 0.0
 degreesOutputCam1 = 0.0
 degreesOutputCam2 = 0.0
-anpha1 = 0.0
-anpha2 = 0.0
-beta1 = 0.0
+convertRadianToDegree = 180/math.pi
+
+readD0FromPlc = 0
+activeImageProcess = 1
 
 set3 = 450
 set4 = 400
@@ -65,6 +71,32 @@ cv2.resizeWindow("frameSecondCamera", frameWidth, frameHeight)
 # cv2.createTrackbar("lowV", "frameSecondCamera", 168, 255, empty)
 # cv2.createTrackbar("highV", "frameSecondCamera", 255, 255, empty)
 
+new_model = tf.keras.models.load_model('C:\HTCDT_PC_INTERFACE_code\AiFile\Xception.h5')
+new_model.summary()
+def writeToPlc():
+    global cX
+    global cY
+    global deepDistence
+    sendX = 0
+    sendY = 0
+    sendDeepDistence = 0
+
+def aiProcess():
+    global new_model
+    if index >= 1:
+        image_size = (180, 180)
+        img = keras.preprocessing.image.load_img('C:\Image\image' + str(index) + '.png', target_size=image_size)
+        img_array = keras.preprocessing.image.img_to_array(img)
+        img_array = tf.expand_dims(img_array, 0)
+
+        predictions = new_model.predict(img_array)
+        score = predictions[0]
+        ripePercent = 100 * (1 - score)
+        print("ripe percent = ", ripePercent)
+        if ripePercent >= 80:
+            print("good")
+            writeToPlc()
+
 def calculateXYZ(compareCam):
     global cX
     global cY
@@ -76,20 +108,26 @@ def calculateXYZ(compareCam):
     global anpha2
     global beta1
     global deepDistence
+    global check1
+    global check2
 
     if compareCam == 1:
+        check1 += 1
         T1D = abs(cameraCenterX - cX)
         T2D = abs(cameraCenterY - cY)
         anpha1 = atan(9.8 * T1D / 4279.8) * convertRadianToDegree
         anpha2 = atan(5.45 * T2D / 2352) * convertRadianToDegree
         degreesOutputCam1 = 90 - anpha1
     else:
+        check2 += 1
         T1D = abs(cameraCenterX - cX)
         beta1 = atan(9.8 * T1D / 4279.8) * convertRadianToDegree
         degreesOutputCam2 = 90 - beta1
 
-    deepDistence = distenceBetweenTwoCam * tan(degreesOutputCam1 / convertRadianToDegree) * tan(degreesOutputCam2 / convertRadianToDegree) / (tan(degreesOutputCam1 / convertRadianToDegree) + tan(degreesOutputCam2 / convertRadianToDegree))
-    if compareCam == 1:
+    if check1 >= 1 & check2 >= 1:
+        check1 = 0
+        check2 = 0
+        deepDistence = distenceBetweenTwoCam * tan(degreesOutputCam1 / convertRadianToDegree) * tan(degreesOutputCam2 / convertRadianToDegree) / (tan(degreesOutputCam1 / convertRadianToDegree) + tan(degreesOutputCam2 / convertRadianToDegree))
         if cX > cameraCenterX:
             X = tan(anpha1/convertRadianToDegree) * deepDistence
         else:
@@ -98,6 +136,8 @@ def calculateXYZ(compareCam):
             Y = -tan(anpha2 / convertRadianToDegree) * deepDistence
         else:
             Y = tan(anpha2 / convertRadianToDegree) * deepDistence
+        print("X: ", X)
+        print("Y: ", Y)
 
 def cropImage(inputImage):
     global cX
@@ -107,13 +147,8 @@ def cropImage(inputImage):
     xRight = cX + 45
     yBottom = cY + 40
     yTop = cY - 40
-    # print("xLeft = ", xLeft)
-    # print("xRight = ", xRight)
-    # print("yTop = ", yTop)
-    # print("yBottom = ", yBottom)
-    # print("-----------------------------------")
+
     if xLeft > 0 and xRight > 0 and yBottom > 0 and yTop > 0:
-        # print("++++++++++++++++++++++++++++++++++++")
         cv2.rectangle(inputImage, (cX - 40, cY + 40), (cX + 40, cY - 40), (0, 255, 0), 3)
         roi = inputImage[yTop: yBottom, xLeft: xRight] #Y && X
         index += 1
@@ -128,6 +163,7 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
     global Y
     global deepDistence
     global cameraCenterX
+    global numberObjectInOneShot
     width = int(frameNo.shape[1] * scale)
     height = int(frameNo.shape[0] * scale)
 
@@ -165,21 +201,43 @@ def processImage(frameNo, captureFrame, trackBar, frameShow, redMask, compareCam
             cv2.putText(frameNo, "Center" + str(cX) + ", " + str(cY), (cX - 20, cY - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
             calculateXYZ(compareCam)
-            if compareCam == 1:
+            if deepDistence > 0: # crop image just when the object is lies on common area two cams
+                cropImage(frameNo)
+                # numberObjectInOneShot += 1
+
+            if compareCam == 2: # show X,Y,Z immediately after the calculation is complete
                 cv2.putText(frameNo, "X: " + str(round(X, 2)), (5, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
                 cv2.putText(frameNo, "Y: " + str(round(Y, 2)), (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
                 cv2.putText(frameNo, "Z = D: " + str(round(deepDistence, 2)), (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                cropImage(frameNo)
+
     cv2.imshow(frameShow, frameNo)
     # cv2.imshow(redMask, redObject)
 
 while True:
-    processImage("frameFirstCamera", captureFirstCamera, "frameFirstCamera", "frameFirstCamera", "redMaskFirst", 1)
-    processImage("frameSecondCamera", captureSecondCamera, "frameSecondCamera", "frameSecondCamera", "redMaskSecond", 2)
-    deepDistence = 0
+    activeAiProcess = 0
+    # read D0 from PLC,
+    # if D0 = 1:
+        # activeImageProcess = 1
+        # Write D0 = 0 to PLC
+
+    if activeImageProcess == 1:
+        processImage("frameFirstCamera", captureFirstCamera, "frameFirstCamera", "frameFirstCamera", "redMaskFirst", 1)
+        processImage("frameSecondCamera", captureSecondCamera, "frameSecondCamera", "frameSecondCamera", "redMaskSecond", 2)
+
+        while index > 0:
+            activeAiProcess += 1
+            if index >= activeAiProcess:
+                aiProcess()
+            else:
+                index = 0
+                activeAiProcess = 0
+
     X = 0
     Y = 0
-    if cv2.waitKey(1500) & 0xFF == ord('q'):
+    deepDistence = 0
+    # activeImageProcess == 0
+
+    if cv2.waitKey(2000) & 0xFF == ord('q'):
         break
 
 # captureFirstCamera.realese()
